@@ -107,8 +107,8 @@ jobs:
 
         - name: Run integration tests
           env:
-            API_URL: ${{ secrets.TEST_API_URL }}
-            API_KEY: ${{ secrets.TEST_API_KEY }}
+            TEST_API_URL: ${{ secrets.TEST_API_URL }}
+            TEST_API_KEY: ${{ secrets.TEST_API_KEY }}
           run: |
             pytest tests/test_integration.py -v
 
@@ -181,8 +181,8 @@ jobs:
 
         - name: Run smoke tests
           env:
-            API_URL: ${{ secrets.PROD_API_URL }}
-            API_KEY: ${{ secrets.PROD_API_KEY }}
+            PROD_API_URL: ${{ secrets.PROD_API_URL }}
+            PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
           run: |
             pytest tests/test_integration.py::TestEmailVerifierAPI::test_valid_email_via_api -v
             pytest tests/test_integration.py::TestEmailVerifierAPI::test_disposable_email_via_api -v
