@@ -4,8 +4,8 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-api_key = os.getenv('email-verifier-key')
-url = os.getenv('email-verifier-lambda-url')
+api_key = os.getenv('PROD_API_KEY')
+url = os.getenv('PROD_API_URL')
 
 payload = {"email": "test@protonmail.com"}
 headers = {"Content-Type": "application/json",
