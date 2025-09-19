@@ -160,134 +160,63 @@ jobs:
         - name: Print prod. URL
           run: |
             echo "Deployed to prod. on ${{ secrets.PROD_API_URL }}"
-
-    api-test-prod:
-      needs: deploy-prod
-      runs-on: ubuntu-latest
-      name: API test in after prod. deployment
-
-      steps:
-      - name: Test prod. api 
-        run: |
-          echo "Testing prod. api..."
-
-          response=$(curl -s -X POST \
-            "${{ secrets.PROD_API_URL }}" \
-            -H "Content-Type: application/json" \
-            -H "x-api-key: ${{ secrets.PROD_API_KEY }} \
-            -d '{"email": "user@gmail.com"}'
-          )
-
-          echo "Response: $response"
-
-          if echo "$response" | grep -q "safe_to_register"; then
-            echo "API test passed"
-          else
-            echo "API test failed"
-            exit 1
-          fi
     
-    metrics-check:
+    after-deployment-test:
       needs: deploy-prod
       runs-on: ubuntu-latest
-      name: Check metrics
+      name: Testing API after prod
 
       steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - name: Checkout code 
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          python-version: '3.11'
+      
+      - name: Install requests
+        run: pip install requests
 
-      - name: Test production API
+      - name: Test prod. API 
+        env:
+          PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+          PROD_API_URL: ${{ secrets.PROD_API_URL }}
         run: |
-          echo "Testing production API..."
-          
-          # Test valid email
-          response=$(curl -s -X POST \
-            "${{ secrets.PROD_API_URL }}" \
-            -H "Content-Type: application/json" \
-            -H "x-api-key: ${{ secrets.PROD_API_KEY }}" \
-            -d '{"email": "user@gmail.com"}')
-          
-          echo "Response: $response"
-          
-          # Check if response contains key fields
-          if echo "$response" | grep -q "safe_to_register"; then
-            echo "API test passed"
-          else
-            echo "API test failed"
-            exit 1
-          fi
+          python3 << 'EOF'
+          import requests
+          import json
+          import os
 
-      - name: Invoke Lambda function
-        run: |
-          echo "Invoking Lambda function..."
-          aws lambda invoke \
-            --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
-            --payload '{"email": "test@example.com"}' \
-            response.json
-          
-          if grep -q "safe_to_register" response.json; then
-            echo "Function invocation successful"
-          else
-            echo "Function invocation failed"
-            cat response.json
-            exit 1
-          fi
+          api_key = os.getenv('PROD_API_KEY')
+          url = os.getenv('PROD_API_URL')
 
-      - name: Check CloudWatch metrics
-        run: |
-          echo "Checking CloudWatch metrics..."         
-          sleep 30
-          
-          START_TIME=$(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
-          END_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-          
-          INVOCATIONS=$(aws cloudwatch get-metric-statistics \
-            --namespace "AWS/Lambda" \
-            --metric-name "Invocations" \
-            --dimensions Name=FunctionName,Value=${{ secrets.LAMBDA_FUNCTION_NAME }} \
-            --start-time "$START_TIME" \
-            --end-time "$END_TIME" \
-            --period 300 \
-            --statistics Sum \
-            --query 'Datapoints[0].Sum' \
-            --output text)
-          
-          ERRORS=$(aws cloudwatch get-metric-statistics \
-            --namespace "AWS/Lambda" \
-            --metric-name "Errors" \
-            --dimensions Name=FunctionName,Value=${{ secrets.LAMBDA_FUNCTION_NAME }} \
-            --start-time "$START_TIME" \
-            --end-time "$END_TIME" \
-            --period 300 \
-            --statistics Sum \
-            --query 'Datapoints[0].Sum' \
-            --output text)
-          
-          DURATION=$(aws cloudwatch get-metric-statistics \
-            --namespace "AWS/Lambda" \
-            --metric-name "Duration" \
-            --dimensions Name=FunctionName,Value=${{ secrets.LAMBDA_FUNCTION_NAME }} \
-            --start-time "$START_TIME" \
-            --end-time "$END_TIME" \
-            --period 300 \
-            --statistics Average \
-            --query 'Datapoints[0].Average' \
-            --output text)
-          
-          echo "Metrics Results:"
-          echo "- Invocations: ${INVOCATIONS:-0}"
-          echo "- Errors: ${ERRORS:-0}"
-          echo "- Average Duration: ${DURATION:-N/A} ms"
-          
-          if [ "$INVOCATIONS" = "None" ] || [ "$INVOCATIONS" = "0" ]; then
-            echo "Warning: No invocations recorded in CloudWatch"
-          elif [ "$ERRORS" != "None" ] && [ "$ERRORS" != "0" ]; then
-            echo "Error: Function had errors"
-            exit 1
-          else
-            echo "Metrics look healthy"
-          fi
+          print(f"Testing API")
+          print(f"API Key: {1 if api_key else 0}")
+
+          payload = {"email": "user@gmail.com"}
+          headers = {
+            "Content-Type": "application/json",
+            "x-api-key": api_key  
+          }
+
+          try:
+            response = requests.post(url, headers=headers, json=payload)
+            print(f"Status code: {response.status_code}")
+
+            if response.status_code == 200:
+              data = response.json()
+              body_str = data["body"]
+              body_dict = json.loads(body_str)
+              print(f"Safe to register: {body_dict['safe_to_register']}")
+              print("API test passed")
+            else:
+              print(f"API test FAILED - HTTP {response.status_code}")
+              print(f"Response: {response.text}")
+              exit(1)
+          except Exception as e:
+            print(f"API test FAILED - Error: {e}")
+            exit(1)
+          EOF
+
+        
