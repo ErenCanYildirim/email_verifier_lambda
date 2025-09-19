@@ -161,34 +161,113 @@ jobs:
           run: |
             echo "Deployed to prod. on ${{ secrets.PROD_API_URL }}"
 
-    integrations-tests-prod:
-        needs: deploy-prod
-        runs-on: ubuntu-latest
-        name: Smoke tests 
+    api-test-prod:
+      needs: deploy-prod
+      runs-on: ubuntu-latest
+      name: API test in after prod. deployment
 
-        steps:
-        - name: Checkout code
-          uses: actions/checkout@v3
+      steps:
+      - name: Test prod. api 
+        run: |
+          echo "Testing prod. api..."
 
-        - name: Setup python
-          uses: actions/setup-python@v4
-          with:
-            python-version: '3.11'
+          response=$(curl -s -X POST \
+            "${{ secrets.PROD_API_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${{ secrets.PROD_API_KEY }} \
+            -d '{"email": "user@gmail.com"}'
+          )
 
-        - name: Install test dependencies
-          run: |
-            pip install requests python-dotenv pytest
+          echo "Response: $response"
 
-        - name: Run smoke tests
-          env:
-            PROD_API_URL: ${{ secrets.PROD_API_URL }}
-            PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
-          run: |
-            pytest tests/test_integration.py::TestEmailVerifierAPI::test_valid_email_via_api -v
-            pytest tests/test_integration.py::TestEmailVerifierAPI::test_disposable_email_via_api -v
-        
-        - name: Deployment successful
-          run: |
-            echo "Prod deployment successful"
-            echo "Smoke tests passed"    
-        
+          if echo "$response" | grep -q "safe_to_register"; then
+            echo "API test passed"
+          else
+            echo "API test failed"
+            exit 1
+          fi
+    
+    metrics-check:
+      needs: deploy-prod
+      runs-on: ubuntu-latest
+      name: Check metrics
+
+      steps:
+      - name: Config AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Invoke lambda function
+        run: |
+          echo "Invoking lambda func..."
+
+          aws lambda invoke \
+            --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
+            --payload '{"email": "test@example.com"}' \
+            response.json
+
+            if grep -q "safe_to_register" response.json; then
+              echo "Function invocation successful!"
+            else
+              echo "Function invocation failed"
+              cat response.json
+              exit 1
+            fi
+
+      - name: Check CloudWatch metrics
+        run: |
+          echo "Checking CloudWatch"
+          sleep 30
+
+          START_TIME=$(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
+          END_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          
+          INVOCATIONS=$(aws cloudwatch get-metric-statistics \
+            --namespace "AWS/Lambda"
+            --metric-name "Invocations" \
+            --dimensions Name=FunctionName,Value=${{ secrets.LAMBDA_FUNCTION_NAME }} \    
+            --start-time "$START_TIME" \
+            --end-time "$END_TIME" \
+            --period 300 \
+            --statistics Sum \
+            --query 'Datapoints[0].Sum' \
+            --output text)
+
+          ERRORS=$(aws cloudwatch get-metric-statistics \
+            --namespace "AWS/Lambda" \
+            --metric-name "Errors" \
+            --dimensions Name=FunctionName,Value=${{ secrets.LAMBDA_FUNCTION_NAME }} \
+            --start-time "$START_TIME" \
+            --end-time "$END_TIME" \
+            --period 300 \
+            --statistics Sum \
+            --query 'Datapoints[0].Sum' \
+            --output text)
+
+          DURATION=$(aws cloudwatch get-metric-statistics \
+            --namespace "AWS/Lambda" \
+            --metric-name "Duration" \
+            --dimensions Name=FunctionName,Value=${{ secrets.LAMBDA_FUNCTION_NAME }} \
+            --start-time "$START_TIME" \
+            --end-time "$END_TIME" \
+            --period 300 \
+            --statistics Average \
+            --query 'Datapoints[0].Average' \
+            --output text)
+
+          echo "Metrics results:"
+          echo "- Invocations: ${INVOCATIONS:-0}"
+          echo "- Errors: ${ERRORS:-0}"
+          echo "- Average duration: ${DURATION:-N/A} ms"
+
+          if [ "$INVOCATIONS" = "None" ] || [ "$INVOCATIONS" = "0" ]; then
+            echo "Warning: No invocations recorded!"
+          elif [ "$ERRORS" != "None" ] && [ "$ERRORS" != "0" ]; then
+            echo "Error: Function had errors"
+            exit 1
+          else
+            echo "Metrics look healthy"
+          fi
