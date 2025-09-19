@@ -7,7 +7,6 @@ from typing import Dict
 class EmailVerifier:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
-        self.cache = {}
 
         self.disposable_domains = {
             'tempmail.com', 'temp-mail.org', 'guerrillamail.com', 'mailinator.com',

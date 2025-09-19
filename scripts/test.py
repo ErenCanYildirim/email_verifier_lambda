@@ -5,8 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 api_key = os.getenv('email-verifier-key')
-
-url = "https://8esssstfbi.execute-api.eu-north-1.amazonaws.com/prod/verify"
+url = os.getenv('email-verifier-lambda-url')
 
 payload = {"email": "test@protonmail.com"}
 headers = {"Content-Type": "application/json",
