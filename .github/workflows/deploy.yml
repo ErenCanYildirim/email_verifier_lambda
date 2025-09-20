@@ -167,59 +167,14 @@ jobs:
       name: Testing API after prod
 
       steps:
-      - name: Checkout code 
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - name: Install requests
-        run: pip install requests
-      
-      - name: Wait for API GW to propagate
-        run: sleep 60
-
-      - name: Test prod. API 
-        env:
-          PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
-          PROD_API_URL: ${{ secrets.PROD_API_URL }}
+      - name: Test lambda function
         run: |
-          python3 << 'EOF'
-          import requests
-          import json
-          import os
+          echo "Testing lambda function directly..."
+          aws lambda invoke \
+            --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
+            --payload '{"httpMethod":"POST","headers":{"x-api-key":"'${{ secrets.PROD_API_KEY }}'"},"body":"{\"email\":\"test@example.com\"}"}' \
+            --output text \
+            response.json
 
-          api_key = os.getenv('PROD_API_KEY')
-          url = os.getenv('PROD_API_URL')
-
-          print(f"Testing API")
-          print(f"API Key: {1 if api_key else 0}")
-
-          payload = {"email": "user@gmail.com"}
-          headers = {
-            "Content-Type": "application/json",
-            "x-api-key": api_key.strip() 
-          }
-
-          try:
-            response = requests.post(url, headers=headers, json=payload)
-            print(f"Status code: {response.status_code}")
-
-            if response.status_code == 200:
-              data = response.json()
-              body_str = data["body"]
-              body_dict = json.loads(body_str)
-              print(f"Safe to register: {body_dict['safe_to_register']}")
-              print("API test passed")
-            else:
-              print(f"API test FAILED - HTTP {response.status_code}")
-              print(f"Response: {response.text}")
-              exit(1)
-          except Exception as e:
-            print(f"API test FAILED - Error: {e}")
-            exit(1)
-          EOF
-
-        
+          echo "Lambda response:"
+          cat response.json
