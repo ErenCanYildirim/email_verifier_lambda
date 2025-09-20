@@ -178,14 +178,25 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
         
       
-      - name: Test lambda function directly
+      - name: Test lambda function
         run: |
-          echo "Testing lambda function directly..."
+          echo "Test lambda..."
+
+          cat > payload.json << 'EOF'
+          {
+            "httpMethod": "POST",
+            "headers": {
+              "x-api-key": "${{ secrets.PROD_API_KEY }}",
+              "Content-Type": "application/json"
+              },
+              "body": "{\"email\":\"user@gmail.com\"}"
+          }
+          EOF
+
           aws lambda invoke \
             --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
-            --payload '{"httpMethod":"POST","headers":{"x-api-key":"'${{ secrets.PROD_API_KEY }}'"},"body":"{\"email\":\"test@example.com\"}"}' \
-            --output text \
-            response.json
-          
+            --payload file://payload.json \
+            response.json 
+
           echo "Lambda response:"
           cat response.json
