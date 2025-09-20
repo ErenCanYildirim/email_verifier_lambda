@@ -177,6 +177,9 @@ jobs:
       
       - name: Install requests
         run: pip install requests
+      
+      - name: Wait for API GW to propagate
+        run: sleep 60
 
       - name: Test prod. API 
         env:
@@ -193,10 +196,6 @@ jobs:
 
           print(f"Testing API")
           print(f"API Key: {1 if api_key else 0}")
-          print(f"API Key exists: {api_key is not None}")
-          print(f"API Key length: {len(api_key) if api_key else 0}")
-          print(f"API Key first 10 chars: {api_key[:10] if api_key else 'None'}")
-          print(f"URL: {url}")
 
           payload = {"email": "user@gmail.com"}
           headers = {
