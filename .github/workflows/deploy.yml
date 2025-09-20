@@ -193,11 +193,15 @@ jobs:
 
           print(f"Testing API")
           print(f"API Key: {1 if api_key else 0}")
+          print(f"API Key exists: {api_key is not None}")
+          print(f"API Key length: {len(api_key) if api_key else 0}")
+          print(f"API Key first 10 chars: {api_key[:10] if api_key else 'None'}")
+          print(f"URL: {url}")
 
           payload = {"email": "user@gmail.com"}
           headers = {
             "Content-Type": "application/json",
-            "x-api-key": api_key  
+            "x-api-key": api_key.strip() 
           }
 
           try:
