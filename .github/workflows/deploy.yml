@@ -179,24 +179,29 @@ jobs:
         
       
       - name: Test lambda function
+        env:
+          PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
         run: |
           echo "Test lambda..."
-
-          cat > payload.json << 'EOF'
+          
+          cat > payload.json <<EOF
           {
             "httpMethod": "POST",
             "headers": {
-              "x-api-key": "${{ secrets.PROD_API_KEY }}",
+              "x-api-key": "${PROD_API_KEY}",
               "Content-Type": "application/json"
-              },
-              "body": "{\"email\":\"user@gmail.com\"}"
+            },
+            "body": "{\"email\":\"user@gmail.com\"}"
           }
           EOF
-
+          
+          echo "Generated payload:"
+          cat payload.json
+          
           aws lambda invoke \
             --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
             --payload file://payload.json \
-            response.json 
-
+            response.json
+          
           echo "Lambda response:"
           cat response.json
