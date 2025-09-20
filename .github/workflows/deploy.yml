@@ -177,54 +177,43 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
         
-      
-      - name: Simple API test with different headers
+      - name: Test prod. API 
         env:
           PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
           PROD_API_URL: ${{ secrets.PROD_API_URL }}
-          TEST_API_KEY: ${{ secrets.TEST_API_KEY }}
-          TEST_API_URL: ${{ secrets.TEST_API_URL }}
         run: |
-          python3 -c "
+          python3 << 'EOF'
           import requests
+          import json
           import os
 
-          prod_url = os.getenv('PROD_API_URL')
-          test_url = os.getenv('TEST_API_URL')
-          prod_key = os.getenv('PROD_API_KEY')
-          test_key = os.getenv('TEST_API_KEY')
+          api_key = os.getenv('PROD_API_KEY')
+          url = os.getenv('PROD_API_URL')
 
-          print('PROD URL:', prod_url)
-          print('TEST URL:', test_url)
-          print('URLs identical:', prod_url == test_url)
+          print(f"Testing API")
+          print(f"API Key exists: {api_key is not None}")
 
-          # Try different header formats
-          headers_list = [
-              {'Content-Type': 'application/json', 'x-api-key': prod_key},
-              {'Content-Type': 'application/json', 'X-API-Key': prod_key},
-              {'Content-Type': 'application/json', 'X-Api-Key': prod_key},
-              {'Content-Type': 'application/json', 'Authorization': prod_key},
-          ]
+          payload = {"email": "user@gmail.com"}
+          headers = {
+              "Content-Type": "application/json",
+              "x-api-key": api_key.strip()  # Make sure this is lowercase
+          }
 
-          for i, headers in enumerate(headers_list, 1):
-              print(f'\n--- Attempt {i} ---')
-              try:
-                  response = requests.post(prod_url, headers=headers, json={'email': 'test@example.com'}, timeout=10)
-                  print(f'Status: {response.status_code}')
-                  if response.status_code == 200:
-                      print('SUCCESS!')
-                      break
-                  else:
-                      print(f'Response: {response.text[:100]}')
-              except Exception as e:
-                  print(f'Error: {e}')
-
-          # Test working endpoint for comparison
-          print('\n=== TESTING WORKING TEST ENDPOINT ===')
           try:
-              response = requests.post(test_url, headers={'Content-Type': 'application/json', 'x-api-key': test_key}, json={'email': 'test@example.com'})
-              print(f'TEST Status: {response.status_code}')
-              print(f'TEST Response: {response.text[:100]}')
+              response = requests.post(url, headers=headers, json=payload)
+              print(f"Status code: {response.status_code}")
+
+              if response.status_code == 200:
+                  data = response.json()
+                  body_str = data["body"]
+                  body_dict = json.loads(body_str)
+                  print(f"Safe to register: {body_dict['safe_to_register']}")
+                  print("API test passed")
+              else:
+                  print(f"API test FAILED - HTTP {response.status_code}")
+                  print(f"Response: {response.text}")
+                  exit(1)
           except Exception as e:
-              print(f'TEST Error: {e}')
-          "
+              print(f"API test FAILED - Error: {e}")
+              exit(1)
+          EOF
