@@ -178,34 +178,53 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
         
       
-      - name: Debug API URLs and test different approaches
+      - name: Simple API test with different headers
         env:
           PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
           PROD_API_URL: ${{ secrets.PROD_API_URL }}
           TEST_API_KEY: ${{ secrets.TEST_API_KEY }}
           TEST_API_URL: ${{ secrets.TEST_API_URL }}
         run: |
-          python3 << 'EOF'
+          python3 -c "
           import requests
           import os
-          
+
           prod_url = os.getenv('PROD_API_URL')
           test_url = os.getenv('TEST_API_URL')
           prod_key = os.getenv('PROD_API_KEY')
           test_key = os.getenv('TEST_API_KEY')
-          
-          print(f"PROD URL: {prod_url}")
-          print(f"TEST URL: {test_url}")
-          print(f"URL difference: {prod_url.replace(test_url, 'DIFFERENT') if test_url in prod_url else 'COMPLETELY DIFFERENT'}")
-          
-          # Test with different header cases
-          header_variations = [
-              {"Content-Type": "application/json", "x-api-key": prod_key},
-              {"Content-Type": "application/json", "X-API-Key": prod_key},
-              {"Content-Type": "application/json", "X-Api-Key": prod_key},
-              {"Content-Type": "application/json", "Authorization": prod_key},
-              {"Content-Type": "application/json", "Authorization": f"Bearer {prod_key}"},
+
+          print('PROD URL:', prod_url)
+          print('TEST URL:', test_url)
+          print('URLs identical:', prod_url == test_url)
+
+          # Try different header formats
+          headers_list = [
+              {'Content-Type': 'application/json', 'x-api-key': prod_key},
+              {'Content-Type': 'application/json', 'X-API-Key': prod_key},
+              {'Content-Type': 'application/json', 'X-Api-Key': prod_key},
+              {'Content-Type': 'application/json', 'Authorization': prod_key},
           ]
-          
-          for i, headers in enumerate(header_variations, 1):
-              print(f"\n--- Attempt {i}: {list(headers.keys())}
+
+          for i, headers in enumerate(headers_list, 1):
+              print(f'\n--- Attempt {i} ---')
+              try:
+                  response = requests.post(prod_url, headers=headers, json={'email': 'test@example.com'}, timeout=10)
+                  print(f'Status: {response.status_code}')
+                  if response.status_code == 200:
+                      print('SUCCESS!')
+                      break
+                  else:
+                      print(f'Response: {response.text[:100]}')
+              except Exception as e:
+                  print(f'Error: {e}')
+
+          # Test working endpoint for comparison
+          print('\n=== TESTING WORKING TEST ENDPOINT ===')
+          try:
+              response = requests.post(test_url, headers={'Content-Type': 'application/json', 'x-api-key': test_key}, json={'email': 'test@example.com'})
+              print(f'TEST Status: {response.status_code}')
+              print(f'TEST Response: {response.text[:100]}')
+          except Exception as e:
+              print(f'TEST Error: {e}')
+          "
